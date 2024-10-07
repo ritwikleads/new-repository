@@ -3,7 +3,7 @@
 const express = require('express');
 const cors = require('cors'); // Import CORS
 const app = express();
-const port = 3000; // You can change this to any port you prefer
+const port = 80; // You can change this to any port you prefer
 const puppeteer = require('puppeteer');
 const fs = require('fs');
 const path = require('path');
