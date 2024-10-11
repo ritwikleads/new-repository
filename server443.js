@@ -3,12 +3,12 @@
 const express = require('express');
 const cors = require('cors'); // Import CORS
 const app = express();
-const port = 443; // You can change this to any port you prefer
+const port = 80; // You can change this to any port you prefer
 const puppeteer = require('puppeteer');
 const fs = require('fs');
 const path = require('path');
 
-// Middleware to parse JSON bodies
+// Middleware to parse JSON bodies and enable CORS
 app.use(cors()); // Enable CORS for all requests
 app.use(express.json({ limit: '100mb' })); // Increase limit if needed
 
@@ -65,7 +65,7 @@ app.post('/process-address', async (req, res) => {
             throw new Error("Check my roof button not found");
         }
 
-        // Extract text content based on the provided selectors
+        // Function to extract text content based on the provided selector
         const extractText = async (selector) => {
             try {
                 await page.waitForSelector(selector, { timeout: 5000 });
@@ -76,7 +76,7 @@ app.post('/process-address', async (req, res) => {
             }
         };
 
-        // Extract texts
+        // Extract texts using appropriate selectors
         const text1 = await extractText('body > div.view-wrap > address-view > div.main-content-wrapper > div > div > section.section.section-map > div.address-map-panel > md-card:nth-child(2) > ul > li:nth-child(1) > div.panel-fact-text.md-body');
         const text2 = await extractText('body > div.view-wrap > address-view > div.main-content-wrapper > div > div > section.section.section-map > div.address-map-panel > md-card:nth-child(2) > ul > li:nth-child(1) > div.panel-fact-caption.md-caption');
         const text3 = await extractText('body > div.view-wrap > address-view > div.main-content-wrapper > div > div > section.section.section-map > div.address-map-panel > md-card:nth-child(2) > ul > li:nth-child(2) > div.panel-fact-text.md-body');
@@ -130,6 +130,20 @@ app.post('/process-address', async (req, res) => {
             const cropTop = 0;     // Adjust this value as needed
             const cropBottom = 25; // Adjust this value as needed
 
+            // **MODIFIED CODE STARTS HERE**
+            // Capture the screenshot as a Base64-encoded string without saving to a file
+            screenshotBase64 = await page.screenshot({
+                encoding: 'base64', // Set encoding to 'base64' to get a Base64 string
+                clip: {
+                    x: mapDimensions.x + cropLeft,
+                    y: mapDimensions.y + cropTop,
+                    width: mapDimensions.width - (cropLeft + cropRight),
+                    height: mapDimensions.height - (cropTop + cropBottom)
+                }
+            });
+
+            // **OPTIONAL:** If you still want to save the screenshot to a file, you can do so separately
+            /*
             // Ensure the screenshots directory exists
             const screenshotsDir = path.join(__dirname, 'screenshots');
             if (!fs.existsSync(screenshotsDir)) {
@@ -140,7 +154,8 @@ app.post('/process-address', async (req, res) => {
             const timestamp = Date.now();
             const screenshotPath = path.join(screenshotsDir, `sunroof_${timestamp}.png`);
 
-            const screenshotBuffer = await page.screenshot({
+            // Save the screenshot to a file
+            await page.screenshot({
                 path: screenshotPath, // Save the screenshot to a file
                 clip: {
                     x: mapDimensions.x + cropLeft,
@@ -149,9 +164,11 @@ app.post('/process-address', async (req, res) => {
                     height: mapDimensions.height - (cropTop + cropBottom)
                 }
             });
+            */
+            // **MODIFIED CODE ENDS HERE**
 
-            // Convert the screenshot to a Base64 string
-            screenshotBase64 = screenshotBuffer.toString('base64');
+            // **DEBUGGING:** Log the length of the Base64 string to verify it's being generated
+            console.log(`Screenshot Base64 Length: ${screenshotBase64.length}`);
         } else {
             throw new Error("Map area not found");
         }
@@ -170,7 +187,7 @@ app.post('/process-address', async (req, res) => {
                 text5,
                 text6
             },
-            screenshot: screenshotBase64
+            screenshot: screenshotBase64 // Ensure this is the Base64 string
         });
 
     } catch (error) {
