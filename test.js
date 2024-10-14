@@ -3,23 +3,10 @@
 const express = require('express');
 const cors = require('cors'); // Import CORS
 const app = express();
+const port = 80; // You can change this to any port you prefer  
+const puppeteer = require('puppeteer');
 const fs = require('fs');
 const path = require('path');
-const puppeteer = require('puppeteer');
-
-// **Add HTTPS and HTTP modules**
-const https = require('https'); // Import HTTPS module
-const http = require('http');   // Import HTTP module for redirection
-
-// **SSL/TLS options**
-const options = {
-  key: fs.readFileSync('C:\\ssl\\rtsmedia.in-key.pem'),
-  cert: fs.readFileSync('C:\\ssl\\rtsmedia.in-crt.pem'),
-  ca: fs.readFileSync('C:\\ssl\\rtsmedia.in-chain.pem') // Include the chain if required
-};
-
-// **Set the HTTPS port**
-const port = 443; // HTTPS default port
 
 // Middleware to parse JSON bodies and enable CORS
 app.use(cors()); // Enable CORS for all requests
@@ -36,7 +23,7 @@ app.post('/process-address', async (req, res) => {
     try {
         // Launch browser in headless mode
         browser = await puppeteer.launch({
-            headless: true,
+            headless: false,
             slowMo: 50,
             defaultViewport: {
                 width: 1920,
@@ -113,7 +100,7 @@ app.post('/process-address', async (req, res) => {
             await expandMapButton.click(); // Click the button to expand Google Maps
 
             try {
-                await new Promise(resolve => setTimeout(resolve, 2000));
+                await new Promise(resolve => setTimeout(resolve, 1500)); // 1.5-second delay to allow expansion
             } catch (err) {
                 console.error('Error during wait:', err.message);
             }
@@ -121,44 +108,35 @@ app.post('/process-address', async (req, res) => {
             throw new Error("Expand Google Maps button not found");
         }
 
-        // Get the dimensions of the map area
-        const mapDimensions = await page.evaluate(() => {
-            const mapElement = document.querySelector('div.gm-style');
-            if (!mapElement) return null;
-            const rect = mapElement.getBoundingClientRect();
-            return {
-                x: rect.left,
-                y: rect.top,
-                width: rect.width,
-                height: rect.height
-            };
+        // **MODIFIED CODE STARTS HERE**
+        // Take a simple screenshot of the entire page after expanding the map
+        const screenshotBase64 = await page.screenshot({
+            encoding: 'base64', // Set encoding to 'base64' to get a Base64 string
+            fullPage: true      // Capture the full scrollable page
         });
 
-        let screenshotBase64 = null;
+        // **DEBUGGING:** Log the length of the Base64 string to verify it's being generated
+        console.log(`Screenshot Base64 Length: ${screenshotBase64.length}`);
+        // **MODIFIED CODE ENDS HERE**
 
-        if (mapDimensions) {
-            // Adjust the edges to crop out unwanted areas
-            const cropLeft = 160;   // Adjust this value as needed
-            const cropRight = 50;  // Adjust this value as needed
-            const cropTop = 0;     // Adjust this value as needed
-            const cropBottom = 25; // Adjust this value as needed
-
-            // Capture the screenshot as a Base64-encoded string without saving to a file
-            screenshotBase64 = await page.screenshot({
-                encoding: 'base64', // Set encoding to 'base64' to get a Base64 string
-                clip: {
-                    x: mapDimensions.x + cropLeft,
-                    y: mapDimensions.y + cropTop,
-                    width: mapDimensions.width - (cropLeft + cropRight),
-                    height: mapDimensions.height - (cropTop + cropBottom)
-                }
-            });
-
-            // Debugging: Log the length of the Base64 string
-            console.log(`Screenshot Base64 Length: ${screenshotBase64.length}`);
-        } else {
-            throw new Error("Map area not found");
+        // **OPTIONAL:** If you still want to save the screenshot to a file, you can do so separately
+        /*
+        // Ensure the screenshots directory exists
+        const screenshotsDir = path.join(__dirname, 'screenshots');
+        if (!fs.existsSync(screenshotsDir)) {
+            fs.mkdirSync(screenshotsDir);
         }
+
+        // Generate a unique filename
+        const timestamp = Date.now();
+        const screenshotPath = path.join(screenshotsDir, `sunroof_${timestamp}.png`);
+
+        // Save the screenshot to a file
+        await page.screenshot({
+            path: screenshotPath, // Save the screenshot to a file
+            fullPage: true        // Capture the full scrollable page
+        });
+        */
 
         // Close the browser
         await browser.close();
@@ -186,15 +164,7 @@ app.post('/process-address', async (req, res) => {
     }
 });
 
-// **Start HTTPS server**
-https.createServer(options, app).listen(port, '0.0.0.0', () => {
-    console.log(`HTTPS Server is running on port ${port}`);
-});
-
-// **Optional: Redirect HTTP to HTTPS**
-http.createServer((req, res) => {
-    res.writeHead(301, { "Location": "https://" + req.headers['host'] + req.url });
-    res.end();
-}).listen(80, '0.0.0.0', () => {
-    console.log('HTTP Server is redirecting to HTTPS');
+// Start the server
+app.listen(port, '0.0.0.0', () => {
+    console.log(`Server is running on port ${port}`);
 });
