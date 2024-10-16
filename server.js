@@ -9,17 +9,24 @@ const puppeteer = require('puppeteer');
 
 // **Add HTTPS and HTTP modules**
 const https = require('https'); // Import HTTPS module
-const http = require('http');   // Import HTTP module for redirection
+const http = require('http');   // Import HTTP module for redirection or local server
 
 // **SSL/TLS options**
-const options = {
-  key: fs.readFileSync('C:\\ssl\\rtsmedia.in-key.pem'),
-  cert: fs.readFileSync('C:\\ssl\\rtsmedia.in-crt.pem'),
-  ca: fs.readFileSync('C:\\ssl\\rtsmedia.in-chain.pem') // Include the chain if required
-};
+let sslOptions = null;
 
-// **Set the HTTPS port**
-const port = 443; // HTTPS default port
+try {
+    sslOptions = {
+        key: fs.readFileSync('C:\\ssl\\rtsmedia.in-key.pem'),
+        cert: fs.readFileSync('C:\\ssl\\rtsmedia.in-crt.pem'),
+        ca: fs.readFileSync('C:\\ssl\\rtsmedia.in-chain.pem') // Include the chain if required
+    };
+} catch (err) {
+    console.warn('SSL files not found, starting HTTP server instead of HTTPS');
+}
+
+// **Set the ports**
+const httpsPort = 443; // HTTPS default port
+const httpPort = 80; // HTTP default port
 
 // Middleware to parse JSON bodies and enable CORS
 app.use(cors()); // Enable CORS for all requests
@@ -104,54 +111,63 @@ app.post('/process-address', async (req, res) => {
         console.log("Text 5: ", text5);
         console.log("Text 6: ", text6);
 
-        // Click the button to expand the Google Maps window
-        const expandMapButtonSelector = 'body > div.view-wrap > address-view > div.main-content-wrapper > div > div > section.section.section-map > sun-map > div > div > div.gm-style > div:nth-child(8) > button';
-        await page.waitForSelector(expandMapButtonSelector); // Wait for the expand button to appear
-        const expandMapButton = await page.$(expandMapButtonSelector);
+        // Select the map element and take a screenshot
+        const mapElementSelector = 'div.gm-style';
 
-        if (expandMapButton) {
-            await expandMapButton.click(); // Click the button to expand Google Maps
+        // Wait for the map element to be present
+        await page.waitForSelector(mapElementSelector);
 
-            try {
-                await new Promise(resolve => setTimeout(resolve, 2000));
-            } catch (err) {
-                console.error('Error during wait:', err.message);
+        const mapElement = await page.$(mapElementSelector);
+
+        if (mapElement) {
+            const mapBoundingBox = await mapElement.boundingBox();
+
+            let screenshotBase64 = null;
+
+            if (mapBoundingBox) {
+                // Adjust the edges to crop out unwanted areas if needed
+                const cropLeft = 160;   // Adjust this value as needed
+                const cropRight = 50;  // Adjust this value as needed
+                const cropTop = 0;     // Adjust this value as needed
+                const cropBottom = 25; // Adjust this value as needed
+
+                // Capture the screenshot as a Base64-encoded string without saving to a file
+                screenshotBase64 = await page.screenshot({
+                    encoding: 'base64', // Set encoding to 'base64' to get a Base64 string
+                    clip: {
+                        x: mapBoundingBox.x + cropLeft,
+                        y: mapBoundingBox.y + cropTop,
+                        width: mapBoundingBox.width - (cropLeft + cropRight),
+                        height: mapBoundingBox.height - (cropTop + cropBottom)
+                    }
+                });
+
+                // Debugging: Log the length of the Base64 string
+                console.log(`Screenshot Base64 Length: ${screenshotBase64.length}`);
+            } else {
+                throw new Error("Map element bounding box not found");
             }
+
+            // Close the browser
+            await browser.close();
+
+            // Send the extracted data and screenshot back to the client
+            res.json({
+                success: true,
+                data: {
+                    text1,
+                    text2,
+                    text3,
+                    text4,
+                    text5,
+                    text6
+                },
+                screenshot: screenshotBase64 // Ensure this is the Base64 string
+            });
+
         } else {
-            throw new Error("Expand Google Maps button not found");
+            throw new Error("Map element not found");
         }
-
-        // **Extract the Google Maps Embed URL**
-        const mapEmbedUrl = await page.evaluate(() => {
-            const iframe = document.querySelector('iframe'); // Adjust the selector based on actual iframe
-            if (iframe) {
-                return iframe.src;
-            }
-            return null;
-        });
-
-        if (!mapEmbedUrl) {
-            throw new Error("Google Maps embed URL not found");
-        }
-
-        console.log("Google Maps Embed URL: ", mapEmbedUrl);
-
-        // **Close the browser**
-        await browser.close();
-
-        // **Send the extracted data and map URL back to the client**
-        res.json({
-            success: true,
-            data: {
-                text1,
-                text2,
-                text3,
-                text4,
-                text5,
-                text6
-            },
-            mapUrl: mapEmbedUrl // Send the embed URL instead of the screenshot
-        });
 
     } catch (error) {
         console.error('Error during processing:', error.message);
@@ -162,15 +178,23 @@ app.post('/process-address', async (req, res) => {
     }
 });
 
-// **Start HTTPS server**
-https.createServer(options, app).listen(port, '0.0.0.0', () => {
-    console.log(`HTTPS Server is running on port ${port}`);
-});
+// **Start server**
+if (sslOptions) {
+    https.createServer(sslOptions, app).listen(httpsPort, '0.0.0.0', () => {
+        console.log(`HTTPS Server is running on port ${httpsPort}`);
+    });
 
-// **Optional: Redirect HTTP to HTTPS**
-http.createServer((req, res) => {
-    res.writeHead(301, { "Location": "https://" + req.headers['host'] + req.url });
-    res.end();
-}).listen(80, '0.0.0.0', () => {
-    console.log('HTTP Server is redirecting to HTTPS');
-});
+    // **Optional: Redirect HTTP to HTTPS**
+    http.createServer((req, res) => {
+        res.writeHead(301, { "Location": "https://" + req.headers['host'] + req.url });
+        res.end();
+    }).listen(httpPort, '0.0.0.0', () => {
+        console.log('HTTP Server is redirecting to HTTPS');
+    });
+} else {
+    // Start HTTP server for local testing
+    const localPort = 3000; // Or any port you prefer
+    app.listen(localPort, () => {
+        console.log(`HTTP Server is running on port ${localPort}`);
+    });
+}
