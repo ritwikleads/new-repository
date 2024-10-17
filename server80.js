@@ -23,7 +23,7 @@ app.post('/process-address', async (req, res) => {
     try {
         // Launch browser in headless mode
         browser = await puppeteer.launch({
-            headless: true,
+            headless: false,
             slowMo: 50,
             defaultViewport: {
                 width: 1920,
@@ -91,115 +91,97 @@ app.post('/process-address', async (req, res) => {
         console.log("Text 5: ", text5);
         console.log("Text 6: ", text6);
 
-        // Click the button to expand the Google Maps window
-        const expandMapButtonSelector = 'body > div.view-wrap > address-view > div.main-content-wrapper > div > div > section.section.section-map > sun-map > div > div > div.gm-style > div:nth-child(8) > button';
-        await page.waitForSelector(expandMapButtonSelector); // Wait for the expand button to appear
-        const expandMapButton = await page.$(expandMapButtonSelector);
-
-        if (expandMapButton) {
-            await expandMapButton.click(); // Click the button to expand Google Maps
-
-            try {
-                await new Promise(resolve => setTimeout(resolve, 2000));
-            } catch (err) {
-                console.error('Error during wait:', err.message);
-            }
-        } else {
-            throw new Error("Expand Google Maps button not found");
-        }
-
-        // Get the dimensions of the map area
-        const mapDimensions = await page.evaluate(() => {
-            const mapElement = document.querySelector('div.gm-style');
-            if (!mapElement) return null;
-            const rect = mapElement.getBoundingClientRect();
-            return {
-                x: rect.left,
-                y: rect.top,
-                width: rect.width,
-                height: rect.height
-            };
-        });
-
-        let screenshotBase64 = null;
-
-        if (mapDimensions) {
-            // Adjust the edges to crop out unwanted areas
-            const cropLeft = 160;   // Adjust this value as needed
-            const cropRight = 50;  // Adjust this value as needed
-            const cropTop = 0;     // Adjust this value as needed
-            const cropBottom = 25; // Adjust this value as needed
-
-            // **MODIFIED CODE STARTS HERE**
-            // Capture the screenshot as a Base64-encoded string without saving to a file
-            screenshotBase64 = await page.screenshot({
-                encoding: 'base64', // Set encoding to 'base64' to get a Base64 string
-                clip: {
-                    x: mapDimensions.x + cropLeft,
-                    y: mapDimensions.y + cropTop,
-                    width: mapDimensions.width - (cropLeft + cropRight),
-                    height: mapDimensions.height - (cropTop + cropBottom)
-                }
+               // Get the dimensions of the map area
+               const mapDimensions = await page.evaluate(() => {
+                const mapElement = document.querySelector('div.gm-style');
+                if (!mapElement) return null;
+                const rect = mapElement.getBoundingClientRect();
+                return {
+                    x: rect.left,
+                    y: rect.top,
+                    width: rect.width,
+                    height: rect.height
+                };
             });
-
-            // **OPTIONAL:** If you still want to save the screenshot to a file, you can do so separately
-            /*
-            // Ensure the screenshots directory exists
-            const screenshotsDir = path.join(__dirname, 'screenshots');
-            if (!fs.existsSync(screenshotsDir)) {
-                fs.mkdirSync(screenshotsDir);
+    
+            let screenshotBase64_1 = null;
+            let screenshotBase64_2 = null;
+    
+            if (mapDimensions) {
+                // Adjust the edges to crop out unwanted areas
+                const cropLeft = 160;   // Adjust this value as needed
+                const cropRight = 50;  // Adjust this value as needed
+                const cropTop = 0;     // Adjust this value as needed
+                const cropBottom = 25; // Adjust this value as needed
+    
+                // **First Screenshot**
+                screenshotBase64_1 = await page.screenshot({
+                    encoding: 'base64', // Set encoding to 'base64' to get a Base64 string
+                    clip: {
+                        x: mapDimensions.x + cropLeft,
+                        y: mapDimensions.y + cropTop,
+                        width: mapDimensions.width - (cropLeft + cropRight),
+                        height: mapDimensions.height - (cropTop + cropBottom)
+                    }
+                });
+    
+                // **Wait for 1 second before taking the second screenshot**
+                await new Promise(resolve => setTimeout(resolve, 3000));
+    
+                // **Second Screenshot**
+                screenshotBase64_2 = await page.screenshot({
+                    encoding: 'base64', // Set encoding to 'base64' to get a Base64 string
+                    clip: {
+                        x: mapDimensions.x + cropLeft,
+                        y: mapDimensions.y + cropTop,
+                        width: mapDimensions.width - (cropLeft + cropRight),
+                        height: mapDimensions.height - (cropTop + cropBottom)
+                    }
+                });
+    
+                // Debugging: Log the length of the Base64 string
+                console.log(`First Screenshot Base64 Length: ${screenshotBase64_1.length}`);
+                console.log(`Second Screenshot Base64 Length: ${screenshotBase64_2.length}`);
+            } else {
+                throw new Error("Map area not found");
             }
-
-            // Generate a unique filename
-            const timestamp = Date.now();
-            const screenshotPath = path.join(screenshotsDir, `sunroof_${timestamp}.png`);
-
-            // Save the screenshot to a file
-            await page.screenshot({
-                path: screenshotPath, // Save the screenshot to a file
-                clip: {
-                    x: mapDimensions.x + cropLeft,
-                    y: mapDimensions.y + cropTop,
-                    width: mapDimensions.width - (cropLeft + cropRight),
-                    height: mapDimensions.height - (cropTop + cropBottom)
-                }
-            });
-            */
-            // **MODIFIED CODE ENDS HERE**
-
-            // **DEBUGGING:** Log the length of the Base64 string to verify it's being generated
-            console.log(`Screenshot Base64 Length: ${screenshotBase64.length}`);
-        } else {
-            throw new Error("Map area not found");
-        }
-
-        // Close the browser
-        await browser.close();
-
-        // Send the extracted data and screenshot back to the client
-        res.json({
-            success: true,
-            data: {
-                text1,
-                text2,
-                text3,
-                text4,
-                text5,
-                text6
-            },
-            screenshot: screenshotBase64 // Ensure this is the Base64 string
-        });
-
-    } catch (error) {
-        console.error('Error during processing:', error.message);
-        if (browser) {
+    
+            // Close the browser
             await browser.close();
+    
+            // Send the extracted data and **only the second screenshot** back to the client
+            res.json({
+                success: true,
+                data: {
+                    text1,
+                    text2,
+                    text3,
+                    text4,
+                    text5,
+                    text6
+                },
+                screenshot: screenshotBase64_2 // Send only the second Base64 string
+            });
+    
+        } catch (error) {
+            console.error('Error during processing:', error.message);
+            if (browser) {
+                await browser.close();
+            }
+            res.status(500).json({ success: false, error: error.message });
         }
-        res.status(500).json({ success: false, error: error.message });
-    }
-});
+    });
+    
+    // **Start HTTPS server**
+    https.createServer(options, app).listen(port, '0.0.0.0', () => {
+        console.log(`HTTPS Server is running on port ${port}`);
+    });
+    
+    // **Optional: Redirect HTTP to HTTPS**
+    http.createServer((req, res) => {
+        res.writeHead(301, { "Location": "https://" + req.headers['host'] + req.url });
+        res.end();
+    }).listen(80, '0.0.0.0', () => {
+        console.log('HTTP Server is redirecting to HTTPS');
+    });
 
-// Start the server
-app.listen(port, '0.0.0.0', () => {
-    console.log(`Server is running on port ${port}`);
-});
