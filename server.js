@@ -156,7 +156,7 @@ app.post('/process-address', async (req, res) => {
             });
 
             // **Wait for 1 second before taking the second screenshot**
-            await new Promise(resolve => setTimeout(resolve, 1000));
+            await new Promise(resolve => setTimeout(resolve, 2000));
 
             // **Second Screenshot**
             screenshotBase64_2 = await page.screenshot({
