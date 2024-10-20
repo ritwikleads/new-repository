@@ -31,7 +31,7 @@ app.post('/process-address', async (req, res) => {
 
   let browser;
   try {
-    // Launch browser in headless mode without slowMo
+    // Launch browser in headless mode
     browser = await puppeteer.launch({
       headless: true,
       defaultViewport: {
@@ -47,10 +47,20 @@ app.post('/process-address', async (req, res) => {
     // Navigate to Google Sunroof webpage
     await page.goto('https://sunroof.withgoogle.com/', { waitUntil: 'networkidle2' });
 
-    // Wait for the input field and type the address instantly
+    // Wait for the input field
     const addressInputSelector = 'input[type="text"]';
     await page.waitForSelector(addressInputSelector);
-    await page.type(addressInputSelector, address, { delay: 0 });
+
+    // Type the first two characters of the address
+    await page.type(addressInputSelector, address.substring(0, 2), { delay: 100 });
+
+    // Paste the rest of the address
+    // Since we cannot interact with the clipboard directly, we'll set the value directly using page.evaluate
+    await page.evaluate((selector, address) => {
+      const input = document.querySelector(selector);
+      const currentValue = input.value;
+      input.value = currentValue + address.substring(2);
+    }, addressInputSelector, address);
 
     // Click the "Check Roof" button once
     const checkRoofButtonSelector = 'button.btn.btn-fill-orange';
