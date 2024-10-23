@@ -6,20 +6,11 @@ const app = express();
 const fs = require('fs');
 const path = require('path');
 const puppeteer = require('puppeteer');
-
-// Add HTTPS and HTTP modules
 const https = require('https'); // Import HTTPS module
-const http = require('http');   // Import HTTP module for redirection
+const http = require('http');   // Import HTTP module
 
-// SSL/TLS options
-const options = {
-  key: fs.readFileSync('C:\\ssl\\rtsmedia.in-key.pem'),
-  cert: fs.readFileSync('C:\\ssl\\rtsmedia.in-crt.pem'),
-  ca: fs.readFileSync('C:\\ssl\\rtsmedia.in-chain.pem') // Include the chain if required
-};
-
-// Set the HTTPS port
-const port = 443; // HTTPS default port
+// **Determine if we are in local testing mode**
+const isLocal = process.env.LOCAL_TESTING === 'true';
 
 // Middleware to parse JSON bodies and enable CORS
 app.use(cors()); // Enable CORS for all requests
@@ -37,7 +28,7 @@ app.post('/process-address', async (req, res) => {
         // Launch browser in headless mode
         browser = await puppeteer.launch({
             headless: true,
-            slowMo: 50, // You can remove or reduce slowMo for faster execution
+            slowMo: 50,
             defaultViewport: {
                 width: 1920,
                 height: 1080,
@@ -54,10 +45,10 @@ app.post('/process-address', async (req, res) => {
         // Navigate to Google Sunroof webpage
         await page.goto('https://sunroof.withgoogle.com/');
 
-        // Wait for the input field and type the address super fast
+        // Wait for the input field and type the address
         const addressInputSelector = 'input[type="text"]';
         await page.waitForSelector(addressInputSelector);
-        await page.type(addressInputSelector, address, { delay: 0 }); // Type address with no delay
+        await page.type(addressInputSelector, address);
 
         // Wait for the "Check Roof" button and click it twice
         const checkRoofButtonSelector = 'button.btn.btn-fill-orange';
@@ -66,7 +57,7 @@ app.post('/process-address', async (req, res) => {
 
         if (checkRoofButton) {
             await checkRoofButton.click();
-            await new Promise(resolve => setTimeout(resolve, 1000)); // Wait for 1 second
+            await new Promise(resolve => setTimeout(resolve, 100)); // Wait for 0.1 second
             await checkRoofButton.click(); // Second click
 
             try {
@@ -81,7 +72,7 @@ app.post('/process-address', async (req, res) => {
         // Function to extract text content based on the provided selector
         const extractText = async (selector) => {
             try {
-                await page.waitForSelector(selector, { timeout: 5000 });
+                await page.waitForSelector(selector, { timeout: 500 });
                 return await page.$eval(selector, element => element.textContent.trim());
             } catch (err) {
                 console.error(`Error extracting text from ${selector}: ${err.message}`);
@@ -113,7 +104,7 @@ app.post('/process-address', async (req, res) => {
             await expandMapButton.click(); // Click the button to expand Google Maps
 
             try {
-                await new Promise(resolve => setTimeout(resolve, 2000));
+                await new Promise(resolve => setTimeout(resolve, 100));
             } catch (err) {
                 console.error('Error during wait:', err.message);
             }
@@ -144,7 +135,7 @@ app.post('/process-address', async (req, res) => {
             const cropTop = 0;     // Adjust this value as needed
             const cropBottom = 25; // Adjust this value as needed
 
-            // First Screenshot
+            // **First Screenshot**
             screenshotBase64_1 = await page.screenshot({
                 encoding: 'base64', // Set encoding to 'base64' to get a Base64 string
                 clip: {
@@ -155,10 +146,10 @@ app.post('/process-address', async (req, res) => {
                 }
             });
 
-            // Wait for 2 seconds before taking the second screenshot
-            await new Promise(resolve => setTimeout(resolve, 2000));
+            // **Wait for 2.5 seconds before taking the second screenshot**
+            await new Promise(resolve => setTimeout(resolve, 2500));
 
-            // Second Screenshot
+            // **Second Screenshot**
             screenshotBase64_2 = await page.screenshot({
                 encoding: 'base64', // Set encoding to 'base64' to get a Base64 string
                 clip: {
@@ -179,7 +170,7 @@ app.post('/process-address', async (req, res) => {
         // Close the browser
         await browser.close();
 
-        // Send the extracted data and only the second screenshot back to the client
+        // Send the extracted data and **only the second screenshot** back to the client
         res.json({
             success: true,
             data: {
@@ -202,15 +193,33 @@ app.post('/process-address', async (req, res) => {
     }
 });
 
-// Start HTTPS server
-https.createServer(options, app).listen(port, '0.0.0.0', () => {
-    console.log(`HTTPS Server is running on port ${port}`);
-});
+// **Server setup**
+if (isLocal) {
+    const port = process.env.PORT || 3000;
+    app.listen(port, () => {
+        console.log(`HTTP Server is running on port ${port}`);
+    });
+} else {
+    // **SSL/TLS options**
+    const options = {
+        key: fs.readFileSync('C:\\ssl\\rtsmedia.in-key.pem'),
+        cert: fs.readFileSync('C:\\ssl\\rtsmedia.in-crt.pem'),
+        ca: fs.readFileSync('C:\\ssl\\rtsmedia.in-chain.pem') // Include the chain if required
+    };
 
-// Optional: Redirect HTTP to HTTPS
-http.createServer((req, res) => {
-    res.writeHead(301, { "Location": "https://" + req.headers['host'] + req.url });
-    res.end();
-}).listen(80, '0.0.0.0', () => {
-    console.log('HTTP Server is redirecting to HTTPS');
-});
+    // **Set the HTTPS port**
+    const port = 443; // HTTPS default port
+
+    // **Start HTTPS server**
+    https.createServer(options, app).listen(port, '0.0.0.0', () => {
+        console.log(`HTTPS Server is running on port ${port}`);
+    });
+
+    // **Optional: Redirect HTTP to HTTPS**
+    http.createServer((req, res) => {
+        res.writeHead(301, { "Location": "https://" + req.headers['host'] + req.url });
+        res.end();
+    }).listen(80, '0.0.0.0', () => {
+        console.log('HTTP Server is redirecting to HTTPS');
+    });
+}
