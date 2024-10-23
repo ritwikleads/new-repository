@@ -72,7 +72,7 @@ app.post('/process-address', async (req, res) => {
         // Function to extract text content based on the provided selector
         const extractText = async (selector) => {
             try {
-                await page.waitForSelector(selector, { timeout: 500 });
+                await page.waitForSelector(selector, { timeout: 1000 });
                 return await page.$eval(selector, element => element.textContent.trim());
             } catch (err) {
                 console.error(`Error extracting text from ${selector}: ${err.message}`);
