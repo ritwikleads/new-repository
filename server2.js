@@ -48,21 +48,21 @@ app.post('/process-address', async (req, res) => {
     const addressInputSelector = 'input[type="text"]';
     await page.waitForSelector(addressInputSelector);
 
-    // Focus on the input field to make sure it's selected
+    // Focus on the input field
     await page.focus(addressInputSelector);
 
-    // Paste the address into the input field quickly
-    await page.evaluate((selector, value) => {
-      const input = document.querySelector(selector);
-      input.value = value;
-    }, addressInputSelector, address);
+    // Clear any existing text (optional)
+    await page.click(addressInputSelector, { clickCount: 3 });
+    await page.keyboard.press('Backspace');
+
+    // Type the address quickly with no delay
+    await page.type(addressInputSelector, address, { delay: 0 });
 
     // Press Enter on the keyboard
     await page.keyboard.press('Enter');
 
-    // Wait for navigation or for a specific element that indicates the page has loaded
+    // Wait for the results to load
     try {
-      // Wait for a specific element to appear after pressing Enter
       const resultSelector = 'div.address-map-panel';
       await page.waitForSelector(resultSelector, { timeout: 10000 });
     } catch (err) {
@@ -72,7 +72,7 @@ app.post('/process-address', async (req, res) => {
     // Function to extract text content based on the provided selector
     const extractText = async (selector) => {
       try {
-        await page.waitForSelector(selector, { timeout: 3000 });
+        await page.waitForSelector(selector, { timeout: 5000 });
         return await page.$eval(selector, element => element.textContent.trim());
       } catch (err) {
         console.error(`Error extracting text from ${selector}: ${err.message}`);
